@@ -1,10 +1,13 @@
 ﻿using UnityEngine;
 using System.Collections;
+using System;
 
 public class MaxwellSource : MonoBehaviour {
 	enum SourceType {
 		Point
 	}
+
+	const double c = 299792458;
 
 	[SerializeField]
 	SourceType sourceType;
@@ -12,10 +15,13 @@ public class MaxwellSource : MonoBehaviour {
 	[SerializeField]
 	double amplitude;
 	[SerializeField]
-	double frequency;
-	public float val;
-	
+	double waveLength;
+	double angularSpeed;
+
+
 	public void Emit(Maxwell maxwell) {
+
+		angularSpeed = c / (waveLength * 1e-9) * Math.PI * 2;
 		switch (sourceType) {
 		case SourceType.Point:
 			EmitPoint(maxwell);
@@ -30,7 +36,6 @@ public class MaxwellSource : MonoBehaviour {
 		pos *= maxwell.size;
 		uint x = (uint) pos.x;
 		uint y = (uint) pos.y;
-		val = (float)(System.Math.Sin(maxwell.time * frequency) * amplitude);
-		maxwell.H[x, y] += val;
+		maxwell.H[x, y] = (float)(System.Math.Sin(maxwell.time * angularSpeed) * amplitude);
 	}
 }

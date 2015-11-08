@@ -1,10 +1,44 @@
 ﻿using UnityEngine;
 using System.Collections;
+using System;
 
 using scalar = System.Single;
 using vector = UnityEngine.Vector2;
 
 public class Maxwell : MonoBehaviour {
+	enum SurfaceType {
+		Smooth,
+		AntiReflectionFinish,
+		RoughSin,
+		RoughTriangle
+	}
+	private const double e_0 = 8.854187817e-12;
+	private const double u_0 = 1.2566370614e-6;
+
+	[SerializeField]
+	public uint size = 128;
+	[SerializeField]
+	private double timeStep;
+	[SerializeField]
+	private double worldSizeUM;
+
+	[SerializeField]
+	private MaxwellSource[] sources;
+	[SerializeField]
+	private Material material;
+	[SerializeField]
+	private SurfaceType surfaceType;
+	[SerializeField]
+	private float indexOfRefrection;
+	[SerializeField]
+	private double finishThicknessNM;
+	[SerializeField]
+	private double roughnessSpacingNM;
+
+	private double worldScaleNM;
+	private double worldScale;
+
+
 	[HideInInspector]
 	public scalar[,] H;
 	[HideInInspector]
@@ -12,39 +46,23 @@ public class Maxwell : MonoBehaviour {
 	[HideInInspector]
 	public double time;
 
-	scalar[,] u_r;
-	scalar[,] e_r;
+	private scalar[,] u_r;
+	private scalar[,] e_r;
 
-	Color[] texData;
-
-	const double e_0 = 8.854187817e-12;
-	const double u_0 = 1.2566370614e-6;
-
-	[SerializeField]
-	public uint size = 128;
-	[SerializeField]
-	double timeStep = 1e-27F;
-	[SerializeField]
-	double worldScale = 1e-9F;
-	[SerializeField]
-	MaxwellSource[] sources;
-
-	Texture2D texture;
-
-	[SerializeField]
-	Material material;
+	private Texture2D texture;
+	private Color[] texData;
+	private uint sizePP;
 
 	// Use this for initialization
 	void Start () {
-		uint sizePP = size + 1;
+		sizePP = size + 1;
+		worldScaleNM = worldSizeUM * 1000 / size;
+		worldScale = worldScaleNM * 1e-9;
 
 		H = new scalar[size, size];
 		u_r = new scalar[size, size];
 
 		for (uint x = 0; x < size; ++x) {
-			float X = (float)(x) - size / 2;
-			X *= 0.1f;
-			float v = Mathf.Exp(-X * X);
 			for (uint y = 0; y < size; ++y) {
 				H[x, y] = 0;
 				u_r[x, y] = 1;
@@ -55,15 +73,30 @@ public class Maxwell : MonoBehaviour {
 		e_r = new scalar[sizePP, sizePP];
 
 		for (uint x = 0; x < sizePP; ++x) {
+			uint height = (uint) (size / 2);
 			for (uint y = 0; y < sizePP; ++y) {
 				E[x, y] = new vector();
-				e_r[x, y] = x > size / 2 ? 3 : 1;
 			}
+		}
+
+		switch (surfaceType) {
+		case SurfaceType.Smooth:
+			InitializeSmooth();
+			break;
+		case SurfaceType.AntiReflectionFinish:
+			InitializeTwoMedia();
+			break;
+		case SurfaceType.RoughSin:
+			InitializeRoughSin();
+			break;
+		case SurfaceType.RoughTriangle:
+			InitializeRoughTriangle();
+			break;
 		}
 
 		texData = new Color[size * size];
 
-		texture = new Texture2D((int) size, (int) size, TextureFormat.RFloat, false);
+		texture = new Texture2D((int) size, (int) size, TextureFormat.RGFloat, false);
 		texture.wrapMode = TextureWrapMode.Clamp;
 		material.mainTexture = texture;
 		UpdateTex();
@@ -77,8 +110,12 @@ public class Maxwell : MonoBehaviour {
 		for(uint i = 0; i < size; ++i) {
 			for(uint j = 0; j < size; ++j) {
 				texData[i * size + j].r = H[i, j];
+				texData[i * size + j].g = e_r[i, j];
 			}
 		}
+	}
+
+	void OnPreRender() {
 		texture.SetPixels(texData);
 		texture.Apply();
 	}
@@ -113,5 +150,49 @@ public class Maxwell : MonoBehaviour {
 		}
 
 		UpdateTex();
+	}
+
+	void InitializeSmooth() {
+		float tempE_r = indexOfRefrection * indexOfRefrection;
+		for (uint x = 0; x < sizePP; ++x) {
+			uint height = (uint)(size / 2);
+			for (uint y = 0; y < sizePP; ++y) {
+				scalar val = y > height ? tempE_r : 1;
+				e_r[x, y] = val;
+			}
+		}
+	}
+
+	void InitializeTwoMedia() {
+		uint thickness = (uint) (finishThicknessNM / worldScaleNM);
+		for (uint x = 0; x < sizePP; ++x) {
+			uint height = (uint)(size / 2);
+			
+			for (uint y = 0; y < sizePP; ++y) {
+				scalar val = 1;
+				if (y > height) {
+					val *= indexOfRefrection;
+					if (y > height + thickness) val *= indexOfRefrection;
+				}
+				e_r[x, y] = val;
+			}
+		}
+	}
+
+	void InitializeRoughSin() {
+		float tempE_r = indexOfRefrection * indexOfRefrection;
+		uint thickness = (uint)(finishThicknessNM / worldScaleNM / 2);
+		double sinArgMul = worldScale / (roughnessSpacingNM * 1e-9) * (Math.PI * 2);
+        for (uint x = 0; x < sizePP; ++x) {
+			uint height = (uint)(size / 2 + Math.Sin(x * sinArgMul) * thickness);
+			for (uint y = 0; y < sizePP; ++y) {
+				scalar val = y > height ? tempE_r : 1;
+				e_r[x, y] = val;
+			}
+		}
+	}
+
+	void InitializeRoughTriangle() {
+
 	}
 }

@@ -24,7 +24,6 @@ public class Maxwell : MonoBehaviour {
 	double worldScale = 1e-9F;
 
 	Texture2D texture;
-	RenderTexture tex;
 
 	[SerializeField]
 	Material material;
@@ -37,7 +36,7 @@ public class Maxwell : MonoBehaviour {
 		u_r = new scalar[size, size];
 
 		for (uint x = 0; x < size; ++x) {
-			float X = (float) x - 128;
+			float X = (float)(x) - size / 2;
 			X *= 0.1f;
 			float v = Mathf.Exp(-X * X);
 			for (uint y = 0; y < size; ++y) {
@@ -85,19 +84,19 @@ public class Maxwell : MonoBehaviour {
 				scalar de_xOverDy = E[x, y + 1].x - E[x, y].x;
 				scalar de_yOverDx = E[x + 1, y].y - E[x, y].y;
 				scalar dBdt = de_yOverDx - de_xOverDy;
-				scalar deltaH = dBdt * stepOverScaleOverE_0 / u_r[x, y];
+				scalar deltaH = dBdt * stepOverScaleOverU_0 / u_r[x, y];
 				H[x, y] += deltaH;
 			}
 		}
 
 
-		for (uint x = 0; x < sizeMM; ++x) {
-			for (uint y = 0; y < sizeMM; ++y) {
-				scalar db_zOverDx = H[x + 1, y] - H[x, y];
-				scalar db_zOverDy = H[x, y + 1] - H[x, y];
+		for (uint x = 1; x < size; ++x) {
+			for (uint y = 1; y < size; ++y) {
+				scalar db_zOverDx = H[x, y] - H[x - 1, y];
+				scalar db_zOverDy = H[x, y] - H[x, y - 1];
 				vector dDdt = new vector(-db_zOverDy, db_zOverDx);
-				vector deltaE = dDdt * stepOverScaleOverU_0 / e_r[x + 1, y + 1];
-				E[x + 1, y + 1] += deltaE;
+				vector deltaE = dDdt * stepOverScaleOverE_0 / e_r[x, y];
+				E[x, y] += deltaE;
 			}
 		}
 

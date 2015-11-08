@@ -5,8 +5,12 @@ using scalar = System.Single;
 using vector = UnityEngine.Vector2;
 
 public class Maxwell : MonoBehaviour {
-	scalar[,] H;
-	vector[,] E;
+	[HideInInspector]
+	public scalar[,] H;
+	[HideInInspector]
+	public vector[,] E;
+	[HideInInspector]
+	public double time;
 
 	scalar[,] u_r;
 	scalar[,] e_r;
@@ -17,11 +21,13 @@ public class Maxwell : MonoBehaviour {
 	const double u_0 = 1.2566370614e-6;
 
 	[SerializeField]
-	uint size = 128;
+	public uint size = 128;
 	[SerializeField]
 	double timeStep = 1e-27F;
 	[SerializeField]
 	double worldScale = 1e-9F;
+	[SerializeField]
+	MaxwellSource[] sources;
 
 	Texture2D texture;
 
@@ -40,7 +46,7 @@ public class Maxwell : MonoBehaviour {
 			X *= 0.1f;
 			float v = Mathf.Exp(-X * X);
 			for (uint y = 0; y < size; ++y) {
-				H[x, y] = v;
+				H[x, y] = 0;
 				u_r[x, y] = 1;
 			}
 		}
@@ -51,18 +57,23 @@ public class Maxwell : MonoBehaviour {
 		for (uint x = 0; x < sizePP; ++x) {
 			for (uint y = 0; y < sizePP; ++y) {
 				E[x, y] = new vector();
-				e_r[x, y] = 1;
+				e_r[x, y] = x > size / 2 ? 3 : 1;
 			}
 		}
 
 		texData = new Color[size * size];
 
 		texture = new Texture2D((int) size, (int) size, TextureFormat.RFloat, false);
+		texture.wrapMode = TextureWrapMode.Clamp;
 		material.mainTexture = texture;
 		UpdateTex();
 	}
 	
 	void UpdateTex() {
+		foreach(var src in sources) {
+			src.Emit(this);
+		}
+
 		for(uint i = 0; i < size; ++i) {
 			for(uint j = 0; j < size; ++j) {
 				texData[i * size + j].r = H[i, j];
@@ -74,6 +85,7 @@ public class Maxwell : MonoBehaviour {
 
 	// Update is called once per frame
 	void Update () {
+		time += timeStep;
 		uint sizeMM = size - 1;
 		double stepOverScale = timeStep / worldScale;
 		scalar stepOverScaleOverU_0 = (scalar) (stepOverScale / u_0);

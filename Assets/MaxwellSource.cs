@@ -4,7 +4,8 @@ using System;
 
 public class MaxwellSource : MonoBehaviour {
 	enum SourceType {
-		Point
+		Point,
+		Segment
 	}
 	enum WaveFormType {
 		Sinus,
@@ -17,9 +18,10 @@ public class MaxwellSource : MonoBehaviour {
 
 	[SerializeField]
 	SourceType sourceType;
-
 	[SerializeField]
 	WaveFormType waveForm;
+	[SerializeField]
+	GameObject other;
 
 
 
@@ -41,27 +43,61 @@ public class MaxwellSource : MonoBehaviour {
 
 
 	public void Emit(Maxwell maxwell) {
+		maxwellSize = maxwell.size;
 
-		angularSpeed = c / (waveLength * 1e-9) * Math.PI * 2;
+		angularSpeed = c / (waveLength * 1e-9) * Math.PI;
 		switch (sourceType) {
 		case SourceType.Point:
 			EmitPoint(maxwell);
 			break;
+		case SourceType.Segment:
+			EmitSegment(maxwell);
+			break;
 		}
 	}
 
-	private void EmitPoint(Maxwell maxwell) {
-		Vector3 pos = gameObject.transform.position;
+	void WorldToGrid(Vector3 pos, out int x, out int y) {
 		pos /= 10;
 		pos += new Vector3(0.5f, 0.5f, 0);
-		pos *= maxwell.size;
-		uint x = (uint) pos.x;
-		uint y = (uint) pos.y;
+		pos *= maxwellSize;
+		x = (int) pos.x;
+		y = (int) pos.y;
+	}
+
+	uint maxwellSize;
+
+	private void EmitPoint(Maxwell maxwell) {
+		Vector3 pos = gameObject.transform.position;
+		int x, y;
+		WorldToGrid(pos, out x, out y);
 		maxwell.E[x, y] = (float) (emittionFuncs[(int) waveForm](maxwell.time * angularSpeed) * amplitude);
 	}
 
+	private void EmitSegment(Maxwell maxwell) {
+		int x1, y1, x2, y2;
+		WorldToGrid(gameObject.transform.position, out x1, out y1);
+		WorldToGrid(other.transform.position, out x2, out y2);
+
+		int dX = x2 - x1;
+		int dY = y2 - y1;
+		int step;
+		if(Math.Abs(dX)> Math.Abs(dY)) {
+			step = Math.Abs(dX);
+		} else {
+			step = Math.Abs(dY);
+		}
+
+		float val = (float)(emittionFuncs[(int)waveForm](maxwell.time * angularSpeed) * amplitude);
+
+		for (int i = 0; i < step; ++i) {
+			int x = x1 + dX * i / step;
+			int y = y1 + dY * i / step;
+			maxwell.E[x, y] = val;
+        }
+	}
+
 	private double Pulse(double t) {
-		return t == 0 ? 1 : 0;
+		return t > 1 ? 1 : 0;
 	}
 
 	private double GaussPulse(double t) {

@@ -15,6 +15,7 @@ public class Maxwell : MonoBehaviour {
 	}
 	private const double e_0 = 8.854187817e-12;
 	private const double u_0 = 1.2566370614e-6;
+	private const double c = 299792458;
 
 	[SerializeField]
 	public uint size = 128;
@@ -44,7 +45,7 @@ public class Maxwell : MonoBehaviour {
 	public vector[,] H;
 	[HideInInspector]
 	public scalar[,] E;
-	[HideInInspector]
+	//[HideInInspector]
 	public double time;
 	[SerializeField]
 	uint threadCount = 8;
@@ -67,6 +68,9 @@ public class Maxwell : MonoBehaviour {
 		sizePP = size + 1;
 		worldScaleNM = worldSizeUM * 1000 / size;
 		worldScale = worldScaleNM * 1e-9;
+
+		double courantFactor = c * timeStep / worldScale;
+		Debug.Log("Courant Factor: " + courantFactor);
 
 		E = new scalar[size, size];
 		e_r = new scalar[size, size];
@@ -186,7 +190,6 @@ public class Maxwell : MonoBehaviour {
 			}
 
 			middleBarrier.Wait();
-
 			
 			uint beg = data[0] == 0 ? 1 : data[0];
 			for (uint x = beg; x < data[1]; ++x) {

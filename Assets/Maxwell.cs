@@ -41,11 +41,13 @@ public class Maxwell : MonoBehaviour {
 
 
 	[HideInInspector]
-	public scalar[,] H;
+	public vector[,] H;
 	[HideInInspector]
-	public vector[,] E;
+	public scalar[,] E;
 	[HideInInspector]
 	public double time;
+	[SerializeField]
+	uint threadCount = 8;
 
 	private scalar[,] u_r;
 	private scalar[,] e_r;
@@ -54,29 +56,35 @@ public class Maxwell : MonoBehaviour {
 	private Color[] texData;
 	private uint sizePP;
 
+	Thread[] workers;
+	bool threadGo = true;
+	Barrier middleBarrier;
+	Barrier endBarrier;
+	
+
 	// Use this for initialization
 	void Start () {
 		sizePP = size + 1;
 		worldScaleNM = worldSizeUM * 1000 / size;
 		worldScale = worldScaleNM * 1e-9;
 
-		H = new scalar[size, size];
-		u_r = new scalar[size, size];
+		E = new scalar[size, size];
+		e_r = new scalar[size, size];
 
 		for (uint x = 0; x < size; ++x) {
 			for (uint y = 0; y < size; ++y) {
-				H[x, y] = 0;
-				u_r[x, y] = 1;
+				E[x, y] = 0;
 			}
 		}
 
-		E = new vector[sizePP, sizePP];
-		e_r = new scalar[sizePP, sizePP];
+		H = new vector[sizePP, sizePP];
+		u_r = new scalar[sizePP, sizePP];
 
 		for (uint x = 0; x < sizePP; ++x) {
 			uint height = (uint) (size / 2);
 			for (uint y = 0; y < sizePP; ++y) {
-				E[x, y] = new vector();
+				H[x, y] = new vector();
+				u_r[x, y] = 1;
 			}
 		}
 
@@ -101,16 +109,22 @@ public class Maxwell : MonoBehaviour {
 		texture.wrapMode = TextureWrapMode.Clamp;
 		material.mainTexture = texture;
 		UpdateTex();
+
+		workers = new Thread[threadCount];
+		middleBarrier = new Barrier(threadCount);
+		endBarrier = new Barrier(threadCount + 1);
+		
+		for(uint i = 0; i < threadCount; ++i) {
+			workers[i] = new Thread(new ParameterizedThreadStart(doWork));
+			workers[i].Start(new uint[] { i * size / threadCount, (i + 1) * size / threadCount });
+		}
 	}
 	
 	void UpdateTex() {
-		foreach(var src in sources) {
-			src.Emit(this);
-		}
 
 		for(uint i = 0; i < size; ++i) {
 			for(uint j = 0; j < size; ++j) {
-				texData[i * size + j].r = H[i, j];
+				texData[i * size + j].r = E[i, j];
 				texData[i * size + j].g = e_r[i, j];
 			}
 		}
@@ -144,63 +158,63 @@ public class Maxwell : MonoBehaviour {
 	void Update () {
 		time += timeStep;
 		uint sizeMM = size - 1;
-		double stepOverScale = timeStep / worldScale / 2;
-		scalar stepOverScaleOverU_0 = (scalar) (stepOverScale / u_0);
-		scalar stepOverScaleOverE_0 = (scalar)(stepOverScale / e_0);
-		
-		for (uint x = 0; x < size; ++x) {
-			for(uint y = 0; y < size; ++y) {
-				scalar de_xOverDy = E[x, y + 1].x - E[x, y].x;
-				de_xOverDy *= PMLCoeef(y);
-				scalar de_yOverDx = E[x + 1, y].y - E[x, y].y;
-				de_yOverDx *= PMLCoeef(x);
-				scalar dBdt = de_yOverDx - de_xOverDy;
-				scalar deltaH = dBdt * stepOverScaleOverU_0 / u_r[x, y];
-				H[x, y] += deltaH;
-			}
+
+		endBarrier.Wait();
+		foreach (var src in sources) {
+			src.Emit(this);
 		}
-		/*
-		for(uint x = 0; x < size; ++x) {
-			H[x, 0] = H[x, 1];
-			H[0, x] = H[1, x];
-
-			uint ss = size - 1;
-			uint sss = ss - 1;
-			H[x, ss] = H[x, sss];
-			H[ss, x] = H[sss, x];
-		}*/
-
-
-		for (uint x = 1; x < size; ++x) {
-			for (uint y = 1; y < size; ++y) {
-				scalar db_zOverDx = H[x, y] - H[x - 1, y];
-				db_zOverDx *= PMLCoeef(x);
-				scalar db_zOverDy = H[x, y] - H[x, y - 1];
-				db_zOverDy *= PMLCoeef(y);
-				vector dDdt = new vector(-db_zOverDy, db_zOverDx);
-				vector deltaE = dDdt * stepOverScaleOverE_0 / e_r[x, y];
-				E[x, y] += deltaE;
-			}
-		}
-
-		for (uint x = 0; x <= size; ++x) {
-			E[x, 0] = E[x, 1];
-			E[0, x] = E[1, x];
-
-			uint ss = size;
-			uint sss = ss - 1;
-			E[x, ss] = E[x, sss];
-			E[ss, x] = E[sss, x];
-		}
-
 		UpdateTex();
+		endBarrier.Wait();
+	}
+
+	void doWork(object asd) {
+		uint[] data = (uint[])asd;
+
+		while (threadGo) {
+			double stepOverScale = timeStep / worldScale / 2;
+			scalar stepOverScaleOverU_0 = (scalar)(stepOverScale / u_0);
+			scalar stepOverScaleOverE_0 = (scalar)(stepOverScale / e_0);
+			
+			for (uint x = data[0]; x < data[1]; ++x) {
+				for (uint y = 0; y < size; ++y) {
+					scalar de_xOverDy = H[x, y + 1].x - H[x, y].x;
+					scalar de_yOverDx = H[x + 1, y].y - H[x, y].y;
+					scalar dDdt = de_yOverDx - de_xOverDy;
+					scalar deltaE = dDdt * stepOverScaleOverE_0 / e_r[x, y];
+					E[x, y] += deltaE;
+				}
+			}
+
+			middleBarrier.Wait();
+
+			
+			uint beg = data[0] == 0 ? 1 : data[0];
+			for (uint x = beg; x < data[1]; ++x) {
+				for (uint y = 1; y < size; ++y) {
+					scalar db_zOverDx = E[x, y] - E[x - 1, y];
+					scalar db_zOverDy = E[x, y] - E[x, y - 1];
+					vector dBdt = new vector(-db_zOverDy, db_zOverDx);
+					vector deltaH = dBdt * stepOverScaleOverU_0 / u_r[x, y];
+					H[x, y] += deltaH;
+				}
+			}
+
+			endBarrier.Wait();
+			endBarrier.Wait();
+		}
+	}
+
+	void OnDestroy() {
+		threadGo = false;
+		endBarrier.Wait();
+		endBarrier.Wait();
 	}
 
 	void InitializeSmooth() {
 		float tempE_r = indexOfRefrection * indexOfRefrection;
-		for (uint x = 0; x < sizePP; ++x) {
+		for (uint x = 0; x < size; ++x) {
 			uint height = (uint)(size / 2);
-			for (uint y = 0; y < sizePP; ++y) {
+			for (uint y = 0; y < size; ++y) {
 				scalar val = y > height ? tempE_r : 1;
 				e_r[x, y] = val;
 			}
@@ -209,10 +223,10 @@ public class Maxwell : MonoBehaviour {
 
 	void InitializeTwoMedia() {
 		uint thickness = (uint) (finishThicknessNM / worldScaleNM);
-		for (uint x = 0; x < sizePP; ++x) {
+		for (uint x = 0; x < size; ++x) {
 			uint height = (uint)(size / 2);
 			
-			for (uint y = 0; y < sizePP; ++y) {
+			for (uint y = 0; y < size; ++y) {
 				scalar val = 1;
 				if (y > height) {
 					val *= indexOfRefrection;
@@ -228,9 +242,9 @@ public class Maxwell : MonoBehaviour {
 		float tempE_r = indexOfRefrection * indexOfRefrection;
 		uint thickness = (uint)(finishThicknessNM / worldScaleNM / 2);
 		double sinArgMul = worldScale / (roughnessSpacingNM * 1e-9) * (Math.PI * 2);
-        for (uint x = 0; x < sizePP; ++x) {
+        for (uint x = 0; x < size; ++x) {
 			uint height = (uint)(size / 2 + Math.Sin(x * sinArgMul) * thickness);
-			for (uint y = 0; y < sizePP; ++y) {
+			for (uint y = 0; y < size; ++y) {
 				scalar val = y > height ? tempE_r : 1;
 				e_r[x, y] = val;
 			}

@@ -6,6 +6,10 @@ public class MaxwellSource : MonoBehaviour {
 	enum SourceType {
 		Point
 	}
+	enum WaveFormType {
+		Sinus,
+		Pulse
+	}
 
 	const double c = 299792458;
 
@@ -13,10 +17,23 @@ public class MaxwellSource : MonoBehaviour {
 	SourceType sourceType;
 
 	[SerializeField]
-	double amplitude;
+	WaveFormType waveForm;
+
+
+
+	[SerializeField]
+	float amplitude;
 	[SerializeField]
 	double waveLength;
 	double angularSpeed;
+
+	private Func<double, double>[] emittionFuncs;
+
+	public MaxwellSource() {
+		emittionFuncs = new Func<double, double>[2];
+		emittionFuncs[0] = Math.Sin;
+		emittionFuncs[1] = Pulse;
+	}
 
 
 	public void Emit(Maxwell maxwell) {
@@ -36,6 +53,10 @@ public class MaxwellSource : MonoBehaviour {
 		pos *= maxwell.size;
 		uint x = (uint) pos.x;
 		uint y = (uint) pos.y;
-		maxwell.H[x, y] = (float)(System.Math.Sin(maxwell.time * angularSpeed) * amplitude);
+		maxwell.H[x, y] = (float) (emittionFuncs[(int) waveForm](maxwell.time * angularSpeed) * amplitude);
+	}
+
+	private double Pulse(double t) {
+		return t == 0 ? 1 : 0;
 	}
 }

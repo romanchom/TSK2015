@@ -55,8 +55,10 @@
 				float4 tex = tex2D(_MainTex, i.uv);
 				float mag = tex.r * _Scale;
 				float perm = tex.g - 1;
-				return max(mag, 0) * _ColorPos + 
-					max(-mag, 0) * _ColorNeg + 
+				return pow(
+						max(mag, 0) * _ColorPos + 
+						max(-mag, 0) * _ColorNeg, 
+						1 / 2.4) + 
 					perm * _ColorPerm;
 			}
 			ENDCG

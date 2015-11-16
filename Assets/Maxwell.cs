@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections;
 using System;
+using System.Threading;
 
 using scalar = System.Single;
 using vector = UnityEngine.Vector2;
@@ -120,33 +121,76 @@ public class Maxwell : MonoBehaviour {
 		texture.Apply();
 	}
 
+	scalar PMLCoeef(uint pos, scalar border = 20) {
+		scalar s2 = size / 2;
+		scalar ret = pos;
+		ret -= s2;
+		ret = Mathf.Abs(ret);
+		ret = s2 - ret - 1;
+		ret /= border;// + (1 / size);
+		ret = Mathf.Min(ret, 1);
+		//ret = 1 - ret;
+
+		//ret = 1.0f / (1 + ret * 30);
+
+		//ret *= -1;
+		//ret += s2;
+		//ret -= s2 * border / 4;
+		//ret *= border / 2;
+		return ret;
+	}
+
 	// Update is called once per frame
 	void Update () {
 		time += timeStep;
 		uint sizeMM = size - 1;
-		double stepOverScale = timeStep / worldScale;
+		double stepOverScale = timeStep / worldScale / 2;
 		scalar stepOverScaleOverU_0 = (scalar) (stepOverScale / u_0);
 		scalar stepOverScaleOverE_0 = (scalar)(stepOverScale / e_0);
-
+		
 		for (uint x = 0; x < size; ++x) {
 			for(uint y = 0; y < size; ++y) {
 				scalar de_xOverDy = E[x, y + 1].x - E[x, y].x;
+				de_xOverDy *= PMLCoeef(y);
 				scalar de_yOverDx = E[x + 1, y].y - E[x, y].y;
+				de_yOverDx *= PMLCoeef(x);
 				scalar dBdt = de_yOverDx - de_xOverDy;
 				scalar deltaH = dBdt * stepOverScaleOverU_0 / u_r[x, y];
 				H[x, y] += deltaH;
 			}
 		}
+		/*
+		for(uint x = 0; x < size; ++x) {
+			H[x, 0] = H[x, 1];
+			H[0, x] = H[1, x];
+
+			uint ss = size - 1;
+			uint sss = ss - 1;
+			H[x, ss] = H[x, sss];
+			H[ss, x] = H[sss, x];
+		}*/
 
 
 		for (uint x = 1; x < size; ++x) {
 			for (uint y = 1; y < size; ++y) {
 				scalar db_zOverDx = H[x, y] - H[x - 1, y];
+				db_zOverDx *= PMLCoeef(x);
 				scalar db_zOverDy = H[x, y] - H[x, y - 1];
+				db_zOverDy *= PMLCoeef(y);
 				vector dDdt = new vector(-db_zOverDy, db_zOverDx);
 				vector deltaE = dDdt * stepOverScaleOverE_0 / e_r[x, y];
 				E[x, y] += deltaE;
 			}
+		}
+
+		for (uint x = 0; x <= size; ++x) {
+			E[x, 0] = E[x, 1];
+			E[0, x] = E[1, x];
+
+			uint ss = size;
+			uint sss = ss - 1;
+			E[x, ss] = E[x, sss];
+			E[ss, x] = E[sss, x];
 		}
 
 		UpdateTex();
@@ -175,6 +219,7 @@ public class Maxwell : MonoBehaviour {
 					if (y > height + thickness) val *= indexOfRefrection;
 				}
 				e_r[x, y] = val;
+				//e_r[x, y] = PMLCoeef(x) + 1;
 			}
 		}
 	}

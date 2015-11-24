@@ -65,6 +65,37 @@ public class Maxwell : MonoBehaviour {
 
 	// Use this for initialization
 	void Start () {
+		Init();
+	}
+
+	public void SetSurface(int type) {
+		surfaceType = (SurfaceType)type;
+		Reset();
+	}
+
+	public void SetIndex(string index) {
+		try {
+			indexOfRefrection = float.Parse(index);
+			Reset();
+		} catch { }
+    }
+
+	bool running = true;
+	public void StopStart() {
+		endBarrier.Wait();
+		running = !running;
+	}
+
+	public void Reset() {
+		foreach(var t in workers) {
+			t.Abort();
+		}
+		Init();
+	}
+
+	void Init() {
+		time = 0;
+		running = true;
 		sizePP = size + 1;
 		worldScaleNM = worldSizeUM * 1000 / size;
 		worldScale = worldScaleNM * 1e-9;
@@ -85,7 +116,7 @@ public class Maxwell : MonoBehaviour {
 		u_r = new scalar[sizePP, sizePP];
 
 		for (uint x = 0; x < sizePP; ++x) {
-			uint height = (uint) (size / 2);
+			uint height = (uint)(size / 2);
 			for (uint y = 0; y < sizePP; ++y) {
 				H[x, y] = new vector();
 				u_r[x, y] = 1;
@@ -109,7 +140,7 @@ public class Maxwell : MonoBehaviour {
 
 		texData = new Color[size * size];
 
-		texture = new Texture2D((int) size, (int) size, TextureFormat.RGFloat, false);
+		texture = new Texture2D((int)size, (int)size, TextureFormat.RGFloat, false);
 		texture.wrapMode = TextureWrapMode.Clamp;
 		material.mainTexture = texture;
 		UpdateTex();
@@ -117,8 +148,8 @@ public class Maxwell : MonoBehaviour {
 		workers = new Thread[threadCount];
 		middleBarrier = new Barrier(threadCount);
 		endBarrier = new Barrier(threadCount + 1);
-		
-		for(uint i = 0; i < threadCount; ++i) {
+
+		for (uint i = 0; i < threadCount; ++i) {
 			workers[i] = new Thread(new ParameterizedThreadStart(doWork));
 			workers[i].Start(new uint[] { i * size / threadCount, (i + 1) * size / threadCount });
 		}
@@ -139,36 +170,19 @@ public class Maxwell : MonoBehaviour {
 		texture.Apply();
 	}
 
-	scalar PMLCoeef(uint pos, scalar border = 20) {
-		scalar s2 = size / 2;
-		scalar ret = pos;
-		ret -= s2;
-		ret = Mathf.Abs(ret);
-		ret = s2 - ret - 1;
-		ret /= border;// + (1 / size);
-		ret = Mathf.Min(ret, 1);
-		//ret = 1 - ret;
-
-		//ret = 1.0f / (1 + ret * 30);
-
-		//ret *= -1;
-		//ret += s2;
-		//ret -= s2 * border / 4;
-		//ret *= border / 2;
-		return ret;
-	}
-
 	// Update is called once per frame
 	void Update () {
-		time += timeStep;
+		if(running) time += timeStep;
 		uint sizeMM = size - 1;
 
-		endBarrier.Wait();
-		foreach (var src in sources) {
-			src.Emit(this);
+		if (running) {
+			endBarrier.Wait();
+			foreach (var src in sources) {
+				src.Emit(this);
+			}
 		}
 		UpdateTex();
-		endBarrier.Wait();
+		if(running) endBarrier.Wait();
 	}
 
 	void doWork(object asd) {
@@ -208,9 +222,7 @@ public class Maxwell : MonoBehaviour {
 	}
 
 	void OnDestroy() {
-		threadGo = false;
-		endBarrier.Wait();
-		endBarrier.Wait();
+		foreach (var t in workers) t.Abort();
 	}
 
 	void InitializeSmooth() {

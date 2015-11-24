@@ -33,6 +33,17 @@ public class MaxwellSource : MonoBehaviour {
 
 	private Func<double, double>[] emittionFuncs;
 
+	public void IsPoint(bool p) {
+		if (p) sourceType = SourceType.Point;
+		else sourceType = SourceType.Segment;
+	}
+
+	public void SetWavelength(string l) {
+		try {
+			waveLength = double.Parse(l);
+		} catch { }
+	}
+
 	public MaxwellSource() {
 		emittionFuncs = new Func<double, double>[4];
 		emittionFuncs[0] = Math.Sin;

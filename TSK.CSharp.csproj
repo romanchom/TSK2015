@@ -69,9 +69,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\Barrier.cs" />
+    <Compile Include="Assets\MaterialProp.cs" />
     <Compile Include="Assets\Maxwell.cs" />
     <Compile Include="Assets\MaxwellSource.cs" />
     <Compile Include="Assets\ScreenDraw.cs" />
+    <Compile Include="Assets\TimeGetter.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Assets\Clean.shader" />
